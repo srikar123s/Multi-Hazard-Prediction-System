@@ -42,12 +42,20 @@ provide an accessible way to explore potential scenarios.
 
 ## 5. Screenshots & Demo
 
-Add screenshots or a hosted demonstration link here:
+The dashboard provides an interactive map, hazard overlays, dynamic rainfall
+scenarios, 3D terrain visualization, and simulation plots.
 
-```text
-docs/screenshots/dashboard.png
-docs/screenshots/dynamic-simulation.png
-```
+### 3D Hazard Simulation
+
+![3D hazard simulation](docs/screenshots/dashboard-3d-simulation.png)
+
+### Hazard Map
+
+![Regional hazard map](docs/screenshots/hazard-map.png)
+
+### Simulation Plots
+
+![Historical simulation plots](docs/screenshots/simulation-plots.png)
 
 The dashboard runs locally at the URL provided by Vite, usually
 `http://localhost:5173`.
