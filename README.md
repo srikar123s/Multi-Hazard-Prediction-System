@@ -1,133 +1,82 @@
 # Multi-Hazard Prediction System
 
-A digital-twin application for exploring flood and landslide risk across
-Uttarakhand, Assam, and the Western Ghats. The system combines terrain and
-hydrology calculations with machine-learning risk scoring and presents the
-results through an interactive React dashboard.
+> A digital-twin platform for predicting and visualizing flood and landslide
+> risk across selected regions of India.
 
-## Features
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
+![React](https://img.shields.io/badge/React-Vite-61DAFB)
+![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688)
+![AI/ML](https://img.shields.io/badge/AI%2FML-XGBoost-orange)
 
-- Terrain-aware flood, landslide, and composite-risk calculations
-- Historical, live rainfall, and dynamic rainfall scenario modes
-- Interactive Leaflet map with hazard layers
-- Plotly charts and 3D terrain visualizations
-- XGBoost-based machine-learning risk enrichment
-- GeoJSON output for map rendering
+## 1. Overview
 
-## Architecture
+The Multi-Hazard Prediction System creates a digital twin of Uttarakhand,
+Assam, and the Western Ghats. It combines terrain, hydrology, rainfall, and
+machine-learning data to estimate flood, landslide, and composite risk through
+an interactive React dashboard.
+
+## 2. Problem Statement
+
+Floods and landslides are influenced by interacting factors such as rainfall,
+terrain, soil saturation, elevation, slope, and upstream water flow. Traditional
+single-factor analysis may not represent these relationships accurately or
+provide an accessible way to explore potential scenarios.
+
+## 3. Objectives
+
+- Model terrain and downhill water flow for supported regions.
+- Estimate flood and landslide risk using physics-based indicators.
+- Improve predictions using historical data and XGBoost.
+- Provide historical, live, and what-if rainfall simulations.
+- Visualize results through interactive maps and charts.
+
+## 4. Key Features
+
+- Terrain-aware flood, landslide, and composite-risk calculations.
+- Historical, live rainfall, and dynamic rainfall scenario modes.
+- Interactive Leaflet map with hazard layers.
+- Plotly charts and 3D terrain visualizations.
+- Adaptive grid refinement for higher-risk areas.
+- Fast dynamic rainfall updates.
+- GeoJSON output for web visualization.
+
+## 5. Screenshots & Demo
+
+Add screenshots or a hosted demonstration link here:
 
 ```text
-React/Vite frontend  ->  FastAPI backend  ->  simulation engine
-                              |
-                              +-> GeoJSON and plot files in outputs/
-                              +-> terrain, rainfall, and ML services
+docs/screenshots/dashboard.png
+docs/screenshots/dynamic-simulation.png
 ```
 
-The backend runs on port `8345` by default. The frontend expects the backend
-at `http://localhost:8345`.
+The dashboard runs locally at the URL provided by Vite, usually
+`http://localhost:5173`.
 
-## Requirements
+## 6. System Architecture
 
-- Python 3.10 or newer
-- Node.js 18 or newer
-- npm
-- The project data and model assets used by the simulation
-
-Large DEM and NumPy data files are intentionally excluded from Git. Make sure
-the required files are available under `data/` and `ml_models/` before running
-the full simulation.
-
-## Installation
-
-### Backend
-
-From the repository root, create and activate a virtual environment:
-
-```powershell
-python -m venv venv
-.\venv\Scripts\Activate.ps1
+```text
+React/Vite dashboard
+        |
+        v
+FastAPI REST API
+        |
+        +--> Simulation engine
+        |      +--> Terrain and hydrology services
+        |      +--> Rainfall services
+        |      +--> ML risk enrichment
+        |
+        +--> GeoJSON, plots, and progress files
 ```
 
-Install the backend dependencies:
+## 7. Technology Stack
 
-```powershell
-pip install fastapi uvicorn numpy matplotlib geopandas rasterio tqdm xgboost scikit-learn pandas shapely
-```
+- **Frontend:** React, Vite, React Leaflet, Plotly, Lucide React
+- **Backend:** Python, FastAPI, Uvicorn
+- **Scientific computing:** NumPy, GeoPandas, Rasterio, Matplotlib
+- **Machine learning:** XGBoost, scikit-learn, pandas
+- **Geospatial visualization:** Leaflet and GeoJSON
 
-If PowerShell prevents script activation, run the commands using
-`venv\Scripts\python.exe` directly instead.
-
-### Frontend
-
-```powershell
-cd frontend
-npm install
-```
-
-## Running the application
-
-Start the backend from the repository root:
-
-```powershell
-.\venv\Scripts\python.exe server.py
-```
-
-In a second terminal, start the frontend:
-
-```powershell
-cd frontend
-npm run dev
-```
-
-Open the URL printed by Vite, usually `http://localhost:5173`.
-
-## Simulation modes
-
-| Mode | Description |
-| --- | --- |
-| `historical` | Uses generated historical simulation data and cached results when available. |
-| `live` | Uses the live rainfall integration and current model inputs. |
-| `dynamic` | Applies a user-provided rainfall amount for fast what-if scenarios. |
-
-Supported regions:
-
-- `uttarakhand`
-- `assam`
-- `western_ghats`
-
-## Backend API
-
-The FastAPI service exposes:
-
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| `POST` | `/api/simulate` | Run a simulation for a region, mode, and rainfall value. |
-| `POST` | `/api/generate-plots` | Run a simulation and generate plot images. |
-| `GET` | `/api/geojson` | Retrieve processed GeoJSON for a region and mode. |
-| `GET` | `/api/progress` | Read the current simulation progress. |
-| `GET` | `/outputs/<file>` | Serve generated GeoJSON and plot files. |
-
-Example request:
-
-```powershell
-curl.exe -X POST http://localhost:8345/api/simulate `
-  -H "Content-Type: application/json" `
-  -d '{\"region\":\"assam\",\"mode\":\"dynamic\",\"rainfall\":250}'
-```
-
-## Training the ML model
-
-The optional training workflow is documented in
-[`ML_TRAINING_CONDITIONS.md`](./ML_TRAINING_CONDITIONS.md). To run it:
-
-```powershell
-.\venv\Scripts\Activate.ps1
-python train_ml_model.py
-```
-
-Generated model artifacts are written to `ml_models/`.
-
-## Project structure
+## 8. Project Structure
 
 ```text
 .
@@ -142,22 +91,168 @@ Generated model artifacts are written to `ml_models/`.
 └── train_ml_model.py     ML training workflow
 ```
 
-## Frontend commands
+## 9. Installation & Setup
 
-From `frontend/`:
+### Prerequisites
+
+- Python 3.10 or newer
+- Node.js 18 or newer
+- npm
+- Required project data and model assets
+
+### Backend
+
+From the repository root:
 
 ```powershell
-npm run dev       # Start the development server
-npm run build     # Create a production build
-npm run preview   # Preview the production build
-npm run lint      # Run ESLint
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install fastapi uvicorn numpy matplotlib geopandas rasterio tqdm xgboost scikit-learn pandas shapely
 ```
 
-## Notes
+### Frontend
 
-- Historical simulations can take longer on the first run because terrain and
-  GeoJSON data may need to be generated.
-- Generated files in `outputs/` and large source assets are ignored by Git.
-- The frontend currently uses a fixed backend origin of
-  `http://localhost:8345`; update `frontend/src/App.jsx` if the backend runs
-  elsewhere.
+```powershell
+cd frontend
+npm install
+```
+
+Large DEM and NumPy files are excluded from Git. Place required assets under
+`data/` and `ml_models/`.
+
+## 10. Environment Configuration
+
+The backend uses port `8345` by default. The frontend currently uses the
+backend URL `http://localhost:8345`.
+
+To select a specific Python interpreter for simulations, set
+`DIGITALTWINS_PYTHON`:
+
+```powershell
+$env:DIGITALTWINS_PYTHON = "C:\path\to\python.exe"
+```
+
+## 11. Running the Application
+
+Start the backend from the repository root:
+
+```powershell
+.\venv\Scripts\python.exe server.py
+```
+
+In a second terminal, start the frontend:
+
+```powershell
+cd frontend
+npm run dev
+```
+
+Frontend commands:
+
+```powershell
+npm run build
+npm run preview
+npm run lint
+```
+
+## 12. API Documentation
+
+The FastAPI service provides interactive documentation at
+`http://localhost:8345/docs`.
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/simulate` | Run a simulation. |
+| `POST` | `/api/generate-plots` | Run a simulation and generate plots. |
+| `GET` | `/api/geojson` | Retrieve processed GeoJSON. |
+| `GET` | `/api/progress` | Read simulation progress. |
+| `GET` | `/outputs/<file>` | Serve generated output files. |
+
+Example request:
+
+```powershell
+curl.exe -X POST http://localhost:8345/api/simulate `
+  -H "Content-Type: application/json" `
+  -d '{\"region\":\"assam\",\"mode\":\"dynamic\",\"rainfall\":250}'
+```
+
+Supported regions are `uttarakhand`, `assam`, and `western_ghats`.
+Supported modes are `historical`, `live`, and `dynamic`.
+
+## 13. Dataset & Data Sources
+
+The system uses:
+
+- Digital Elevation Models for terrain and elevation processing.
+- Rainfall and CHIRPS-derived data for historical and live scenarios.
+- Historical flood and landslide event records for model training.
+- Generated GeoJSON and cached terrain data for dashboard rendering.
+
+Data files may be subject to their original source licenses and are not all
+stored in this repository.
+
+## 14. Methodology & Implementation
+
+1. DEM data is reprojected and divided into analysis cells.
+2. Elevation and slope are calculated for each cell.
+3. A downhill graph and upstream map estimate water movement.
+4. Soil saturation, rainfall, flood index, and landslide stress are computed.
+5. Physics-based indicators are combined into a composite risk score.
+6. XGBoost uses rainfall and hazard features to provide ML risk enrichment.
+7. Results are clipped to the selected region and returned as compact GeoJSON.
+
+Dynamic mode applies rainfall adjustments to cached results for fast
+what-if analysis.
+
+## 15. Results & Evaluation
+
+The trained model workflow reports ROC-AUC, PR-AUC, and F1-score metrics.
+Current documented training results report approximately:
+
+- **ROC-AUC:** 0.80–0.90
+- **PR-AUC:** 0.70–0.85
+- **F1-score:** 0.70–0.85
+
+See [`ML_TRAINING_RESULTS.md`](./ML_TRAINING_RESULTS.md) for the detailed
+training summary and [`ML_TRAINING_CONDITIONS.md`](./ML_TRAINING_CONDITIONS.md)
+for the training workflow.
+
+## 16. Limitations
+
+- Historical training data is limited and may cause overfitting.
+- Western Ghats event labels are currently sparse.
+- Detailed rainfall and terrain coverage depends on available source data.
+- Results should support analysis and planning, not replace official warnings.
+- Initial historical simulations may require significant processing time.
+
+## 17. Future Scope
+
+- Add elevation, slope, and aspect features from higher-resolution DEMs.
+- Expand and regularly update the historical event dataset.
+- Improve uncertainty quantification and confidence intervals.
+- Add region-specific models and broader geographic coverage.
+- Integrate additional real-time rainfall and alerting services.
+- Deploy the dashboard and API as a scalable cloud service.
+
+## 18. Contributing
+
+1. Fork the repository.
+2. Create a feature branch.
+3. Make focused changes and add or update tests where applicable.
+4. Run `npm run lint` and relevant validation commands.
+5. Open a pull request describing the change.
+
+Please avoid committing secrets, large generated outputs, or restricted data.
+
+## 19. License
+
+No license file is currently included in this repository. Add a `LICENSE`
+file before distributing or reusing the project commercially.
+
+## 20. Authors & Acknowledgements
+
+Developed by the Multi-Hazard Prediction System project team.
+
+Thanks to the maintainers of Python, FastAPI, React, Vite, Leaflet, Plotly,
+GeoPandas, Rasterio, NumPy, scikit-learn, XGBoost, and the providers of the
+terrain, rainfall, and historical hazard datasets used by the project.
