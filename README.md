@@ -30,6 +30,9 @@ hazard risk across Uttarakhand, Assam, and the Western Ghats.
 18. [Contributing](#18-contributing)
 19. [License](#19-license)
 20. [Authors & Acknowledgements](#20-authors--acknowledgements)
+21. [Deployment Notes](#deployment-notes)
+22. [Troubleshooting](#troubleshooting)
+23. [Development](#development)
 
 ## 1. Overview
 
@@ -159,6 +162,50 @@ serves generated files, clips output to regional boundaries, compacts GeoJSON,
 and reports progress. The frontend consumes those resources and renders map,
 chart, and 3D views.
 
+### Request lifecycle
+
+```text
+User selects region, mode, and rainfall
+                  |
+                  v
+        React calls POST /api/simulate
+                  |
+                  v
+        FastAPI validates the request
+                  |
+          +-------+--------+
+          |                |
+          v                v
+     Cached output     Run main.py
+     is returned       with CLI args
+          |                |
+          +-------+--------+
+                  |
+                  v
+     GeoJSON is clipped and compacted
+                  |
+                  v
+       Frontend renders map and charts
+```
+
+### Component responsibilities
+
+| Component | Responsibility |
+| --- | --- |
+| `main.py` | Orchestrates terrain, rainfall, hydrology, hazard, and output processing. |
+| `core/grid.py` | Creates the spatial analysis grid. |
+| `core/reproject.py` | Reprojects DEM data into a metric coordinate system. |
+| `core/terrain.py` | Calculates elevation and slope features. |
+| `core/graph.py` | Builds the downhill graph. |
+| `core/hydrology.py` | Calculates flow accumulation. |
+| `services/memory_service.py` | Updates rainfall memory with decay. |
+| `services/hazard_service.py` | Calculates hazard scores, compacts GeoJSON, and loads ML artifacts. |
+| `services/rainfall_service.py` | Loads CHIRPS data and maps rainfall to cells. |
+| `services/live_rainfall_service.py` | Retrieves live rainfall inputs. |
+| `services/refinement_service.py` | Refines selected high-risk cells. |
+| `server.py` | Exposes the API, starts simulations, and serves output files. |
+| `frontend/src/App.jsx` | Implements dashboard state, API calls, maps, and charts. |
+
 ## 7. Technology Stack
 
 | Layer | Technologies | Responsibility |
@@ -259,6 +306,30 @@ Region input paths are configured in `main.py` under `REGION_CONFIG`. There
 is currently no committed `.env.example`; never commit credentials, tokens,
 or local machine paths.
 
+### Region configuration
+
+Each `REGION_CONFIG` entry in `main.py` associates a public region ID with:
+
+| Value | Purpose |
+| --- | --- |
+| `dem` | Source DEM used for terrain processing. |
+| `utm` | Projected DEM used for metric grid calculations. |
+| `flow` | Precomputed flow-accumulation NumPy array. |
+| `output` | Primary simulation output path. |
+| `lat`, `lon` | Initial map and simulation center. |
+| `rainfall` | CHIRPS NetCDF source. |
+
+If a data file is moved, update the corresponding mapping and verify that the
+file exists before running the engine.
+
+### Runtime and security configuration
+
+The development server enables permissive CORS and binds to `0.0.0.0:8345`.
+This is convenient for local development but should not be exposed directly
+to the public internet. A production deployment should restrict CORS, use
+HTTPS, add authentication and rate limiting where appropriate, and keep
+datasets and model artifacts outside public upload paths.
+
 ## 11. Running the Application
 
 Use two terminals from the repository root.
@@ -326,6 +397,22 @@ curl.exe -X POST http://localhost:8345/api/simulate `
 The response contains status, message, output GeoJSON path, optional plot
 paths, logs, and—when using the fast dynamic path—inline compact GeoJSON.
 
+Typical successful response:
+
+```json
+{
+  "status": "success",
+  "message": "Simulation completed for assam in dynamic mode.",
+  "geojson": "/outputs/assam_dynamic.geojson",
+  "plots": null,
+  "logs": "..."
+}
+```
+
+Unsupported regions or modes return HTTP 400. Missing cached input can return
+HTTP 404. Simulation and file-processing errors are reported as HTTP 500 with
+a diagnostic detail message.
+
 ### `POST /api/generate-plots`
 
 Runs a simulation with plot generation enabled:
@@ -349,6 +436,36 @@ Retrieves processed map data:
 
 Query parameters are `region`, `mode`, `include_ml` (default `true`), and
 `compact` (default `true`).
+
+The returned document follows the GeoJSON `FeatureCollection` shape:
+
+```json
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": []
+      },
+      "properties": {
+        "flood": 0.0,
+        "landslide": 0.0,
+        "risk": 0.0,
+        "probability": 0.0,
+        "runtime_rainfall_mm": 250.0,
+        "risk_level": "low"
+      }
+    }
+  ]
+}
+```
+
+Common properties include `flood`, `landslide`, `risk`, `probability`,
+`physics_risk_score`, `ml_risk_score`, `hybrid_risk_score`,
+`runtime_rainfall_mm`, and `risk_level`. Exact fields can vary between raw,
+summary, historical, live, and dynamic outputs.
 
 ### `GET /outputs/<filename>`
 
@@ -388,6 +505,22 @@ Review the original provider terms before publishing or sharing them.
 Large DEMs, arrays, caches, generated outputs, and the `data/` directory are
 ignored by `.gitignore`.
 
+### Input data quality checks
+
+Before a long simulation, confirm:
+
+1. the DEM opens and has a valid coordinate reference system;
+2. the projected DEM covers the same region as the source DEM;
+3. the flow array dimensions match the raster used to derive it;
+4. rainfall files contain the expected time, latitude, longitude, and
+   rainfall variables;
+5. event rows contain usable latitude, longitude, year, location, and hazard
+   type values; and
+6. the selected region has a matching entry in `REGION_CONFIG`.
+
+The application can produce technically valid output even when source data is
+incomplete, so these checks are important before interpreting results.
+
 ## 14. Methodology & Implementation
 
 ### Terrain and hydrology
@@ -418,6 +551,44 @@ rerunning the full simulation for every input. Rainfall is bounded to
 `0`–`500` mm. Zero rainfall clears hazard values; higher rainfall can activate
 more cells by lowering the activation threshold.
 
+### Risk calculation flow
+
+```text
+rainfall + previous water memory + upstream flow + terrain
+                              |
+                              v
+                  flood index and saturation
+                              |
+                              v
+                     landslide stress
+                              |
+                              v
+                    composite physics risk
+                              |
+                         optional ML
+                              |
+                              v
+                       GeoJSON response
+```
+
+Many displayed values are normalized or clipped to `[0, 1]` so they can be
+compared in map colors and dashboard metrics. This is a modeling convention;
+the values should not automatically be interpreted as calibrated probabilities.
+
+### Adaptive refinement
+
+The engine identifies cells whose probability exceeds an absolute and
+percentile-based threshold. Eligible cells are refined only when their grid
+level is below the configured maximum depth. A cap on the number of cells
+prevents one run from expanding without bound. Refinement improves local
+detail but increases processing time and output size.
+
+### Output generation
+
+A run can write full and summary GeoJSON, compact GeoJSON, PNG charts, JSON
+statistics, terrain caches, and `progress.json`. The API prefers compact or
+summary artifacts for browser requests to reduce transfer and parsing time.
+
 ## 15. Results & Evaluation
 
 The recorded ML training summary reports approximately:
@@ -436,6 +607,64 @@ See [`ML_TRAINING_RESULTS.md`](./ML_TRAINING_RESULTS.md) and
 [`ML_TRAINING_CONDITIONS.md`](./ML_TRAINING_CONDITIONS.md) for the complete
 training data, features, hyperparameters, and evaluation notes.
 
+### Training pipeline
+
+```text
+Historical event CSV
+        |
+        v
+Filter regions, years, and coordinates
+        |
+        v
+Load simulation GeoJSON and calculate cell centroids
+        |
+        v
+Match events to nearby cells
+        |
+        +--> positive event samples
+        +--> negative background samples
+        |
+        v
+Engineer physics, terrain, rainfall, and interaction features
+        |
+        v
+Train/test split and stratified validation
+        |
+        v
+XGBoost classifier and calibration
+        |
+        v
+ml_models/ml_risk_model.pkl
+```
+
+The training script currently records a `0.5` degree spatial matching
+tolerance, uses rainfall years `2013`, `2018`, and `2022`, and removes several
+identifying fields from the final feature set to reduce leakage. Treat the
+executable training configuration as the source of truth when it differs from
+older explanatory notes.
+
+### Feature groups
+
+| Group | Examples | Purpose |
+| --- | --- | --- |
+| Physics | Flood probability, landslide stress, composite risk | Preserve simulation signals |
+| Terrain | Elevation, slope, aspect, roughness | Describe landscape susceptibility |
+| Hydrology | Flow accumulation, distance to water | Describe water concentration |
+| Rainfall | Annual, monsoon, recent rainfall, variability | Describe precipitation patterns |
+| Interactions | Slope x rainfall, flow x slope | Capture compound conditions |
+
+### Re-training checklist
+
+Before replacing the model artifact:
+
+- record dataset date range and row counts;
+- verify positive and negative class counts;
+- check for duplicate events and spatial leakage;
+- evaluate per-region performance, not only aggregate metrics;
+- inspect calibration and threshold behavior;
+- compare feature importance with the previous model; and
+- run a historical simulation to confirm artifact compatibility.
+
 ## 16. Limitations
 
 - The model is an experimental hybrid of simplified physical indicators and
@@ -452,6 +681,36 @@ training data, features, hyperparameters, and evaluation notes.
 
 Validate results against local observations, authoritative forecasts, and
 qualified disaster-management experts before making real-world decisions.
+
+## Deployment Notes
+
+The repository is currently organized for local development. A production
+deployment should package the frontend and backend separately or serve the
+built frontend through a reverse proxy:
+
+```text
+Browser
+  |
+  v
+HTTPS reverse proxy
+  |----------------------> frontend build
+  |
+  +----------------------> FastAPI/Uvicorn
+                                  |
+                                  +--> data/
+                                  +--> ml_models/
+                                  +--> outputs/
+```
+
+For a production-like local API process:
+
+```powershell
+.\venv\Scripts\python.exe -m uvicorn server:app --host 0.0.0.0 --port 8345
+```
+
+Large DEMs, rainfall files, and generated GeoJSON should use mounted storage
+or object storage rather than source control. Keep model, source-data, and
+configuration versions together so results can be reproduced.
 
 ## 17. Future Scope
 
@@ -524,6 +783,41 @@ Confirm that `server.py` is running on port `8345`, `/docs` opens, the
 selected output exists under `outputs/`, and the frontend backend origin
 matches the API URL.
 
+### API returns `404` for GeoJSON
+
+The API requires the raw region/mode GeoJSON to exist before it can return a
+processed response. Run the corresponding simulation first and check the
+lowercase region ID:
+
+```powershell
+Get-ChildItem outputs\assam_*.geojson
+```
+
+### API returns `500` while launching a simulation
+
+Inspect the backend terminal for the child-process error. Common causes are
+missing raster/rainfall files, incompatible geospatial packages, a missing
+model artifact, insufficient memory, or an interpreter selected by
+`DIGITALTWINS_PYTHON` that lacks dependencies.
+
+Run the command directly for a complete traceback:
+
+```powershell
+.\venv\Scripts\python.exe main.py --region assam --mode historical --skip_plots 1
+```
+
+### Live mode cannot retrieve rainfall
+
+Check network access, the live rainfall service implementation, and upstream
+API availability. Use historical or dynamic mode to test the rest of the
+application without a live-data dependency.
+
+### Windows file-lock problems
+
+Stop an old backend process before restarting it, and avoid editing generated
+files while a simulation is writing them. If a generated file is corrupted,
+remove only that specific file and rerun the relevant region/mode.
+
 ## Development
 
 ```powershell
@@ -538,3 +832,23 @@ Set-Location ..
 When changing simulation behavior, validate at least one historical region and
 one dynamic rainfall scenario. When changing API responses, verify
 `/api/progress`, `/api/simulate`, `/api/geojson`, and `/docs`.
+
+### Recommended validation matrix
+
+| Change | Minimum validation |
+| --- | --- |
+| Frontend component or styling | `npm run lint`, `npm run build`, browser smoke test |
+| API validation or response shape | Test valid and invalid requests and inspect `/docs` |
+| Terrain or hydrology code | Compile and run one historical region |
+| Dynamic rainfall logic | Test `0`, `250`, and `500` mm |
+| ML feature or artifact code | Load/train the model and run enriched output |
+| GeoJSON clipping/compaction | Compare compact and non-compact responses |
+
+### Coding conventions
+
+- Keep region IDs lowercase and consistent across Python and React.
+- Reuse existing core and service modules instead of duplicating calculations.
+- Keep generated files under `outputs/`.
+- Preserve explicit errors for invalid inputs and failed child processes.
+- Update this README when commands, endpoints, input paths, or output fields
+  change.
